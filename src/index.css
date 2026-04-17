@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background-color: #0F172A;
+    color: #F8FAFC;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    min-height: 100vh;
+    width: 100%;
+  }
+
+  /* Scrollbar personnalisée */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0F172A;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+  }
+}
+
+@layer components {
+  /* Boutons */
+  .btn-primary {
+    @apply bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-xl px-4 py-2 transition-all duration-150;
+  }
+  .btn-secondary {
+    @apply bg-slate-700 hover:bg-slate-600 text-white rounded-xl px-4 py-2 transition-all duration-150;
+  }
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-500 text-white rounded-xl px-4 py-2 transition-all duration-150;
+  }
+
+  /* Inputs */
+  .input {
+    @apply bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 w-full
+           focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none
+           placeholder-slate-500 transition-all duration-150;
+  }
+
+  /* Cartes */
+  .card {
+    @apply bg-slate-800 rounded-2xl shadow-xl border border-slate-700;
+  }
+}
