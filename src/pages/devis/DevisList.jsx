@@ -42,7 +42,7 @@ export default function DevisList() {
 
   return (
     <PageTransition>
-      <div className="p-4 md:p-6 max-w-5xl mx-auto pb-24 md:pb-6">
+      <div className="p-4 md:p-6 max-w-5xl mx-auto pb-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-white">Devis</h1>

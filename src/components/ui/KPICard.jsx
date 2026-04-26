@@ -51,11 +51,11 @@ export default function KPICard({ title, value, icon: Icon, color = 'amber', for
       whileHover={{ y: -4, scale: 1.02 }}
       transition={{ type: 'spring', stiffness: 350, damping: 28 }}
       onViewportEnter={() => setStarted(true)}
-      className={`bg-slate-800 rounded-2xl shadow-xl border ${c.border} p-5 cursor-default`}
+      className={`bg-slate-800 rounded-2xl shadow-xl border ${c.border} p-3 md:p-5 cursor-default`}
     >
-      <div className="flex items-start justify-between mb-3">
-        <p className="text-slate-400 text-sm font-medium">{title}</p>
-        <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center relative`}>
+      <div className="flex items-start justify-between mb-2 md:mb-3">
+        <p className="text-slate-400 text-xs md:text-sm font-medium leading-tight pr-1">{title}</p>
+        <div className={`w-7 h-7 md:w-9 md:h-9 rounded-xl ${c.bg} flex items-center justify-center relative flex-shrink-0`}>
           {pulse && (
             <motion.div
               className={`absolute inset-0 rounded-xl ${c.bg}`}
@@ -63,11 +63,12 @@ export default function KPICard({ title, value, icon: Icon, color = 'amber', for
               transition={{ repeat: Infinity, duration: 2 }}
             />
           )}
-          <Icon size={18} className={`${c.icon} relative z-10`} />
+          <Icon size={14} className={`${c.icon} relative z-10 md:hidden`} />
+          <Icon size={18} className={`${c.icon} relative z-10 hidden md:block`} />
         </div>
       </div>
-      <p className="text-2xl font-bold text-white">{formatValue(animated)}</p>
-      {subtitle && <p className="text-xs text-slate-500 mt-1">{subtitle}</p>}
+      <p className="text-lg md:text-2xl font-bold text-white leading-none">{formatValue(animated)}</p>
+      {subtitle && <p className="text-xs text-slate-500 mt-1 leading-tight">{subtitle}</p>}
     </motion.div>
   )
 }

@@ -174,7 +174,7 @@ export default function Parametres() {
 
   return (
     <PageTransition>
-      <div className="p-4 md:p-6 max-w-4xl mx-auto pb-24 md:pb-6">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto pb-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-white">Paramètres</h1>
           <Button onClick={handleSauvegarder}>
@@ -283,22 +283,84 @@ export default function Parametres() {
           {/* ── FACTURATION ─────────────────────────────────────── */}
           {onglet === 'facturation' && (
             <>
-              <div className="bg-slate-800 rounded-2xl border border-slate-700 p-5 space-y-4">
-                <h2 className="text-white font-semibold">Numérotation</h2>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {[
-                    { key: 'prefixe_devis', label: 'Préfixe devis', placeholder: 'DEV' },
-                    { key: 'prefixe_facture', label: 'Préfixe facture', placeholder: 'FAC' },
-                  ].map(({ key, label, placeholder }) => (
-                    <div key={key}>
-                      <label className="text-sm text-slate-300 block mb-1">{label}</label>
-                      <input value={form.facturation[key] || ''} onChange={e => setSection('facturation', key, e.target.value)}
-                        placeholder={placeholder}
-                        className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none placeholder-slate-500" />
-                    </div>
-                  ))}
+              <div className="bg-slate-800 rounded-2xl border border-slate-700 p-5 space-y-5">
+                <div>
+                  <h2 className="text-white font-semibold">Numérotation</h2>
+                  <p className="text-slate-500 text-xs mt-1">
+                    Configurez les préfixes et le numéro de départ — utile si vous commencez à utiliser ElecPro en cours d'activité.
+                  </p>
                 </div>
-                <div className="grid sm:grid-cols-3 gap-4">
+
+                {/* Devis */}
+                <div className="bg-slate-700/30 rounded-xl p-4 space-y-3">
+                  <p className="text-slate-300 text-sm font-medium">Devis</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">Préfixe</label>
+                      <input
+                        value={form.facturation.prefixe_devis || ''}
+                        onChange={e => setSection('facturation', 'prefixe_devis', e.target.value)}
+                        placeholder="DEV"
+                        className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none placeholder-slate-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">Prochain numéro</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={form.facturation.compteur_devis || 1}
+                        onChange={e => setSection('facturation', 'compteur_devis', parseInt(e.target.value) || 1)}
+                        className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2">
+                    <span className="text-slate-500 text-xs">Prochain devis :</span>
+                    <span className="text-amber-400 text-xs font-mono font-bold">
+                      {form.facturation.prefixe_devis || 'DEV'}-{new Date().getFullYear()}-{String(form.facturation.compteur_devis || 1).padStart(3, '0')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Factures */}
+                <div className="bg-slate-700/30 rounded-xl p-4 space-y-3">
+                  <p className="text-slate-300 text-sm font-medium">Factures</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">Préfixe</label>
+                      <input
+                        value={form.facturation.prefixe_facture || ''}
+                        onChange={e => setSection('facturation', 'prefixe_facture', e.target.value)}
+                        placeholder="FAC"
+                        className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none placeholder-slate-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">Prochain numéro</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={form.facturation.compteur_facture || 1}
+                        onChange={e => setSection('facturation', 'compteur_facture', parseInt(e.target.value) || 1)}
+                        className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2">
+                    <span className="text-slate-500 text-xs">Prochaine facture :</span>
+                    <span className="text-amber-400 text-xs font-mono font-bold">
+                      {form.facturation.prefixe_facture || 'FAC'}-{new Date().getFullYear()}-{String(form.facturation.compteur_facture || 1).padStart(3, '0')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 bg-blue-900/20 border border-blue-800/30 rounded-xl p-3 text-xs text-blue-300">
+                  <span className="flex-shrink-0 mt-0.5">ℹ️</span>
+                  <span>Exemple : si vous avez déjà émis 23 factures cette année, mettez <strong>24</strong> pour que la prochaine soit <strong className="font-mono">{form.facturation.prefixe_facture || 'FAC'}-{new Date().getFullYear()}-024</strong></span>
+                </div>
+
+                <div className="grid sm:grid-cols-3 gap-4 pt-2 border-t border-slate-700">
                   {[
                     { key: 'tva_defaut', label: 'TVA par défaut (%)', type: 'number' },
                     { key: 'validite_devis', label: 'Validité devis (jours)', type: 'number' },

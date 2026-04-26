@@ -71,7 +71,7 @@ export default function ClientForm() {
 
   return (
     <PageTransition>
-      <div className="p-4 md:p-6 max-w-2xl mx-auto pb-24 md:pb-6">
+      <div className="p-4 md:p-6 max-w-2xl mx-auto pb-8">
         {/* En-tête */}
         <div className="flex items-center gap-3 mb-6">
           <button onClick={() => navigate(-1)} className="text-slate-400 hover:text-white transition-colors">

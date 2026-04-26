@@ -32,9 +32,11 @@ export async function sendEmail({ serviceId, templateId, toEmail, toName, fromNa
 
 // ── TEMPLATES D'EMAILS ────────────────────────────────────
 
-export function templateEnvoiDevis({ devis, client, entreprise }) {
+export function templateEnvoiDevis({ devis, client, entreprise, signToken }) {
   const clientNom = client?.societe || `${client?.prenom || ''} ${client?.nom || ''}`.trim() || 'Client'
   const montant = devis?.total_ttc ? `${devis.total_ttc.toLocaleString('fr-FR')}€ TTC` : ''
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const signUrl = signToken ? `${baseUrl}/signer/${signToken}` : null
 
   return {
     subject: `Devis ${devis.numero}${devis.objet ? ` — ${devis.objet}` : ''}`,
@@ -43,8 +45,15 @@ export function templateEnvoiDevis({ devis, client, entreprise }) {
 Veuillez trouver ci-joint notre devis n°${devis.numero}${devis.objet ? ` pour : ${devis.objet}` : ''}.
 ${montant ? `\nMontant total : ${montant}` : ''}
 ${devis.date_validite ? `Ce devis est valable jusqu'au ${devis.date_validite}.` : ''}
+${signUrl ? `
+──────────────────────────────
+✍️ SIGNATURE EN LIGNE (recommandé)
+Pour signer ce devis directement depuis votre navigateur ou smartphone, cliquez ici :
+${signUrl}
 
-Pour l'accepter, merci de nous retourner ce devis signé avec la mention "Bon pour accord".
+Ce lien est personnel et valable 30 jours.
+──────────────────────────────` : `
+Pour l'accepter, merci de nous retourner ce devis signé avec la mention "Bon pour accord".`}
 
 N'hésitez pas à nous contacter pour toute question.
 
@@ -52,6 +61,7 @@ Cordialement,
 ${entreprise?.nom || ''}
 ${entreprise?.tel ? `Tél : ${entreprise.tel}` : ''}
 ${entreprise?.email || ''}`,
+    signUrl,
   }
 }
 

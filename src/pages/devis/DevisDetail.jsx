@@ -1,10 +1,10 @@
 // Détail devis — aperçu, signature, envoi email, conversion en facture
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, Edit, Trash2, Send, Download, CheckCircle, XCircle,
-  FileText, PenLine, Receipt, X, User, Building2,
+  FileText, PenLine, Receipt, X, User, Building2, Link, RefreshCw, ExternalLink,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import SignatureCanvas from 'react-signature-canvas'
@@ -12,6 +12,14 @@ import { useApp } from '../../context/AppContext'
 import { formatDate, formatMontant, calculerTotaux, today } from '../../lib/utils'
 import { generatePDF } from '../../lib/pdf'
 import { sendEmail, templateEnvoiDevis, initEmailJS } from '../../lib/email'
+import {
+  isSupabaseConfigured,
+  sbCreateSignToken, sbGetPendingSignature, sbMarkTokenApplied, sbGetUser,
+} from '../../lib/supabase'
+import {
+  createLocalSignToken, getLocalSignTokenByDevisId,
+  getPendingLocalSignature, markLocalTokenApplied,
+} from '../../lib/storage'
 import PageTransition from '../../components/layout/PageTransition'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
@@ -29,10 +37,56 @@ export default function DevisDetail() {
   const [signataireEntreprise, setSignataireEntreprise] = useState('')
   const [generatingPDF, setGeneratingPDF] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [signToken, setSignToken] = useState(null)
+  const [checkingRemote, setCheckingRemote] = useState(false)
+  const [showLinkModal, setShowLinkModal] = useState(false)
   const sigClientRef = useRef(null)
   const sigEntrepriseRef = useRef(null)
 
   const devis = allDevis.find(d => d.id === id)
+
+  // Récupérer le token existant au montage
+  useEffect(() => {
+    if (!devis) return
+    if (isSupabaseConfigured) return // Supabase : pas de cache local pour le token
+    const existing = getLocalSignTokenByDevisId(devis.id)
+    if (existing) setSignToken(existing.token)
+  }, [devis?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Vérifier si une signature distante est en attente
+  const checkRemoteSignature = useCallback(async () => {
+    if (!devis) return
+    setCheckingRemote(true)
+    try {
+      let pending = null
+      if (isSupabaseConfigured) {
+        pending = await sbGetPendingSignature(devis.id)
+      } else {
+        pending = getPendingLocalSignature(devis.id)
+      }
+      if (pending) {
+        updateDevis(devis.id, {
+          signature_client: pending.signature_data,
+          statut: 'accepte',
+          date_signature: pending.signature_data?.date || today(),
+        })
+        if (isSupabaseConfigured) {
+          await sbMarkTokenApplied(pending.token)
+        } else {
+          markLocalTokenApplied(pending.token)
+        }
+        setSignToken(null)
+        toast.success(`✍️ Signature de ${pending.signataire} appliquée !`)
+      } else {
+        toast('Aucune signature reçue pour l\'instant.', { icon: '⏳' })
+      }
+    } catch {
+      toast.error('Erreur lors de la vérification')
+    } finally {
+      setCheckingRemote(false)
+    }
+  }, [devis, updateDevis])
+
   if (!devis) {
     return (
       <div className="p-6 text-center text-slate-400">
@@ -58,22 +112,65 @@ export default function DevisDetail() {
     }
   }
 
+  // ── GÉNÉRATION TOKEN SIGNATURE ───────────────────────────
+  async function genererSignToken() {
+    const devisSnapshot = {
+      devis,
+      client: client || null,
+    }
+    const settingsSnapshot = {
+      entreprise: settings?.entreprise || {},
+      facturation: settings?.facturation || {},
+      paiement: settings?.paiement || {},
+    }
+    try {
+      let tok
+      if (isSupabaseConfigured) {
+        const user = await sbGetUser()
+        tok = await sbCreateSignToken({
+          devisId: devis.id,
+          userId: user?.id,
+          devisData: devisSnapshot,
+          settingsData: settingsSnapshot,
+        })
+      } else {
+        tok = createLocalSignToken(devis.id, devisSnapshot, settingsSnapshot)
+      }
+      setSignToken(tok)
+      return tok
+    } catch (err) {
+      console.warn('Token signature non généré :', err.message)
+      return null
+    }
+  }
+
   // ── ENVOI EMAIL ──────────────────────────────────────────
   async function handleEnvoyerEmail() {
     if (!client?.email) { toast.error('Pas d\'email pour ce client'); return }
-    const emailjsCfg = settings?.emailjs
-    if (!emailjsCfg?.public_key || !emailjsCfg?.service_id || !emailjsCfg?.template_id) {
-      // Fallback mailto si EmailJS pas configuré
-      const { subject, message } = templateEnvoiDevis({ devis, client, entreprise: settings?.entreprise })
-      window.open(`mailto:${client.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`)
-      updateDevis(id, { statut: 'envoye', date_envoi: today() })
-      toast('Email ouvert dans votre client mail. Configurez EmailJS dans Paramètres pour l\'envoi automatique.', { icon: '📧' })
-      return
-    }
     setSendingEmail(true)
     try {
+      // Générer le token de signature
+      const tok = await genererSignToken()
+
+      const emailjsCfg = settings?.emailjs
+      const { subject, message } = templateEnvoiDevis({
+        devis, client, entreprise: settings?.entreprise, signToken: tok,
+      })
+
+      if (!emailjsCfg?.public_key || !emailjsCfg?.service_id || !emailjsCfg?.template_id) {
+        // Fallback mailto
+        window.open(`mailto:${client.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`)
+        updateDevis(id, { statut: 'envoye', date_envoi: today() })
+        if (tok) {
+          setShowLinkModal(true)
+          toast('Email ouvert dans votre client mail. Le lien de signature est prêt.', { icon: '📧' })
+        } else {
+          toast('Email ouvert dans votre client mail.', { icon: '📧' })
+        }
+        return
+      }
+
       initEmailJS(emailjsCfg.public_key)
-      const { subject, message } = templateEnvoiDevis({ devis, client, entreprise: settings?.entreprise })
       await sendEmail({
         serviceId: emailjsCfg.service_id,
         templateId: emailjsCfg.template_id,
@@ -85,7 +182,7 @@ export default function DevisDetail() {
         message,
       })
       updateDevis(id, { statut: 'envoye', date_envoi: today() })
-      toast.success(`Devis envoyé à ${client.email}`)
+      toast.success(`Devis envoyé à ${client.email}${tok ? ' avec lien de signature' : ''}`)
     } catch (err) {
       toast.error(`Erreur envoi : ${err.message}`)
     } finally {
@@ -163,7 +260,7 @@ export default function DevisDetail() {
 
   return (
     <PageTransition>
-      <div className="p-4 md:p-6 max-w-6xl mx-auto pb-24 md:pb-6">
+      <div className="p-4 md:p-6 max-w-6xl mx-auto pb-8">
         {/* En-tête */}
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div className="flex items-center gap-3">
@@ -185,6 +282,16 @@ export default function DevisDetail() {
             <Button variant="secondary" size="sm" onClick={handleEnvoyerEmail} loading={sendingEmail}>
               <Send size={14} /> Envoyer
             </Button>
+            {signToken && devis.statut !== 'accepte' && (
+              <Button variant="secondary" size="sm" onClick={() => setShowLinkModal(true)}>
+                <Link size={14} /> Lien signature
+              </Button>
+            )}
+            {signToken && devis.statut !== 'accepte' && (
+              <Button variant="secondary" size="sm" onClick={checkRemoteSignature} loading={checkingRemote}>
+                <RefreshCw size={14} /> Vérifier
+              </Button>
+            )}
             <Button variant="secondary" size="sm" onClick={handleTelechargerPDF} loading={generatingPDF}>
               <Download size={14} /> PDF
             </Button>
@@ -238,6 +345,24 @@ export default function DevisDetail() {
                 <div className="flex justify-between">
                   <span className="text-slate-400">Envoyé le</span>
                   <span className="text-white">{formatDate(devis.date_envoi)}</span>
+                </div>
+              )}
+              {signToken && devis.statut !== 'accepte' && (
+                <div className="pt-2 border-t border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Link size={11} className="text-blue-400 shrink-0" />
+                      <span className="text-blue-400 text-xs">Lien de signature envoyé</span>
+                    </div>
+                    <button
+                      onClick={checkRemoteSignature}
+                      disabled={checkingRemote}
+                      className="text-slate-500 hover:text-amber-400 transition-colors"
+                      title="Vérifier si signé"
+                    >
+                      <RefreshCw size={12} className={checkingRemote ? 'animate-spin' : ''} />
+                    </button>
+                  </div>
                 </div>
               )}
               {(devis.signature_client || devis.signature) && (
@@ -344,6 +469,46 @@ export default function DevisDetail() {
             <DocumentPreview doc={devis} type="devis" id="devis-pdf-preview" />
           </motion.div>
         </div>
+
+        {/* Modal lien de signature distante */}
+        <Modal isOpen={showLinkModal} onClose={() => setShowLinkModal(false)} title="Lien de signature à distance">
+          <div className="space-y-4">
+            <p className="text-slate-300 text-sm">
+              Partagez ce lien avec votre client pour qu'il signe le devis depuis son téléphone ou ordinateur.
+            </p>
+            <div className="bg-slate-900 border border-slate-600 rounded-xl p-3">
+              <p className="text-amber-400 text-xs font-mono break-all select-all">
+                {window.location.origin}/signer/{signToken}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/signer/${signToken}`)
+                  toast.success('Lien copié !')
+                }}
+              >
+                Copier le lien
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => window.open(`${window.location.origin}/signer/${signToken}`, '_blank')}
+              >
+                <ExternalLink size={14} /> Ouvrir
+              </Button>
+            </div>
+            <div className="bg-amber-900/20 border border-amber-800/40 rounded-xl p-3 text-xs text-amber-300 space-y-1">
+              <p>✓ Lien valable 30 jours</p>
+              <p>✓ Usage unique — invalide après signature</p>
+              <p>✓ Cliquez <strong>Vérifier</strong> pour récupérer la signature une fois le client a signé</p>
+              {!isSupabaseConfigured && (
+                <p className="text-red-300 mt-2">⚠️ Sans Supabase, ce lien ne fonctionne que sur cet appareil (test local uniquement).</p>
+              )}
+            </div>
+          </div>
+        </Modal>
 
         {/* Modal signature */}
         <Modal isOpen={showSignature} onClose={() => setShowSignature(false)} title="Signature électronique" size="lg">

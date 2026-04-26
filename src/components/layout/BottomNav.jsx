@@ -1,14 +1,14 @@
 // Navigation mobile — bottom nav
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { LayoutDashboard, Users, HardHat, FileText, Receipt } from 'lucide-react'
+import { LayoutDashboard, HardHat, FileText, Receipt, CalendarDays, Wallet } from 'lucide-react'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-  { to: '/clients', label: 'Clients', icon: Users },
-  { to: '/chantiers', label: 'Chantiers', icon: HardHat },
   { to: '/devis', label: 'Devis', icon: FileText },
   { to: '/factures', label: 'Factures', icon: Receipt },
+  { to: '/planning', label: 'Planning', icon: CalendarDays },
+  { to: '/tresorerie', label: 'Tréso', icon: Wallet },
 ]
 
 export default function BottomNav() {

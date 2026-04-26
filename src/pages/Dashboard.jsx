@@ -143,7 +143,7 @@ export default function Dashboard() {
 
   return (
     <PageTransition>
-      <div className="p-4 md:p-6 max-w-7xl mx-auto pb-24 md:pb-6">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto pb-8">
         {/* Titre */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white">Tableau de bord</h1>

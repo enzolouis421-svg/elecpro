@@ -1,9 +1,8 @@
-// Layout principal — sidebar + contenu + nav mobile + assistant IA
+// Layout principal — sidebar + contenu + header mobile + assistant IA
 import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import Sidebar from './components/layout/Sidebar'
-import BottomNav from './components/layout/BottomNav'
 import Header from './components/layout/Header'
 import AIAssistant from './components/ai/AIAssistant'
 import { useApp } from './context/AppContext'
@@ -47,9 +46,6 @@ export default function App() {
           </AnimatePresence>
         </main>
       </div>
-
-      {/* Navigation mobile */}
-      <BottomNav />
 
       {/* Assistant IA flottant */}
       <AIAssistant />

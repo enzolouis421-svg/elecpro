@@ -1,12 +1,42 @@
+// Assistant IA flottant — Groq avec actions directes et contexte complet
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Zap, X, Send, RefreshCw, Mic, MicOff, BarChart2, ArrowRight } from 'lucide-react'
+import { Zap, X, Send, RefreshCw, Mic, MicOff, BarChart2, ArrowRight, ChevronRight } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
-import { callGroq, buildContext, buildSystemPrompt, parseAction, promptAnalyseActivite } from '../../lib/groq'
+import {
+  callGroq, buildContext, buildSystemPrompt, parseAction,
+  promptAnalyseActivite, getQuickSuggestions,
+} from '../../lib/groq'
+import toast from 'react-hot-toast'
 
 const hasSpeechRecognition = typeof window !== 'undefined' &&
   !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+
+// Rendu markdown minimaliste (gras, bullet points)
+function renderMarkdown(text) {
+  const lines = text.split('\n')
+  return lines.map((line, i) => {
+    // Bullet point
+    if (line.match(/^[-•*]\s/)) {
+      const content = line.replace(/^[-•*]\s/, '')
+      return (
+        <div key={i} className="flex gap-2 items-start">
+          <span className="text-amber-400 mt-0.5 flex-shrink-0">•</span>
+          <span dangerouslySetInnerHTML={{ __html: formatInline(content) }} />
+        </div>
+      )
+    }
+    if (line.trim() === '') return <div key={i} className="h-1" />
+    return <p key={i} dangerouslySetInnerHTML={{ __html: formatInline(line) }} />
+  })
+}
+
+function formatInline(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.*?)`/g, '<code class="bg-slate-600 px-1 rounded text-xs">$1</code>')
+}
 
 export default function AIAssistant() {
   const [open, setOpen] = useState(false)
@@ -24,26 +54,30 @@ export default function AIAssistant() {
 
   const location = useLocation()
   const navigate = useNavigate()
-  const { settings, clients, devis, factures, chantiers, getKpis } = useApp()
+  const {
+    settings, clients, devis, factures, chantiers, getKpis,
+    interventions, tresorerie, addIntervention,
+  } = useApp()
 
-  const context = buildContext({ clients, devis, factures, chantiers, kpis: getKpis() })
+  const kpis = getKpis()
+  const context = buildContext({ clients, devis, factures, chantiers, kpis, interventions, tresorerie })
+  const suggestions = getQuickSuggestions(location.pathname)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Réinitialise la conversation au changement de page
   useEffect(() => {
     setMessages([])
     stopListening()
   }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    return () => {
-      stopListening()
-    }
+    return () => stopListening()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── VOIX ─────────────────────────────────────────────────
+  // ── RECONNAISSANCE VOCALE ────────────────────────────
   function startListening() {
     if (!hasSpeechRecognition) return
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -56,7 +90,6 @@ export default function AIAssistant() {
       const transcript = Array.from(e.results).map(r => r[0].transcript).join('')
       setInput(transcript)
 
-      // Relance le countdown à 3s à chaque nouveau résultat final
       if (e.results[e.results.length - 1].isFinal) {
         clearTimeout(sendTimerRef.current)
         clearInterval(countdownRef.current)
@@ -65,10 +98,7 @@ export default function AIAssistant() {
         countdownRef.current = setInterval(() => {
           seconds -= 1
           setVoiceCountdown(seconds)
-          if (seconds <= 0) {
-            clearInterval(countdownRef.current)
-            setVoiceCountdown(null)
-          }
+          if (seconds <= 0) clearInterval(countdownRef.current)
         }, 1000)
         sendTimerRef.current = setTimeout(() => {
           stopListening()
@@ -77,15 +107,8 @@ export default function AIAssistant() {
       }
     }
 
-    recog.onerror = () => {
-      setIsListening(false)
-      setVoiceCountdown(null)
-    }
-
-    recog.onend = () => {
-      setIsListening(false)
-      setVoiceCountdown(null)
-    }
+    recog.onerror = () => { setIsListening(false); setVoiceCountdown(null) }
+    recog.onend = () => { setIsListening(false); setVoiceCountdown(null) }
 
     recognitionRef.current = recog
     recog.start()
@@ -102,14 +125,10 @@ export default function AIAssistant() {
   }
 
   function toggleListening() {
-    if (isListening) {
-      stopListening()
-    } else {
-      startListening()
-    }
+    isListening ? stopListening() : startListening()
   }
 
-  // ── ENVOI MESSAGE ─────────────────────────────────────────
+  // ── ENVOI MESSAGE ────────────────────────────────────
   async function sendMessage(text) {
     const msg = (typeof text === 'string' ? text : input).trim()
     if (!msg || loading) return
@@ -120,7 +139,7 @@ export default function AIAssistant() {
     if (!apiKey) {
       setMessages(prev => [...prev,
         { role: 'user', content: msg },
-        { role: 'assistant', content: '⚠️ Clé API Groq non configurée.\nAllez dans **Paramètres → IA** pour saisir votre clé Groq gratuite.' },
+        { role: 'assistant', content: '⚠️ Clé API Groq non configurée.\nAllez dans **Paramètres → IA** pour saisir votre clé Groq (gratuite sur console.groq.com).' },
       ])
       return
     }
@@ -148,17 +167,34 @@ export default function AIAssistant() {
     }
   }
 
-  function handleAnalyse() {
-    const kpis = getKpis()
-    const prompt = promptAnalyseActivite(kpis, clients, devis, factures)
-    sendMessage(prompt)
-  }
-
+  // ── EXÉCUTER UNE ACTION ──────────────────────────────
   function handleAction(action) {
-    if (action?.route) {
+    if (!action) return
+
+    // Action directe : créer une intervention dans le planning
+    if (action.type === 'intervention') {
+      const { type, label, ...data } = action
+      addIntervention(data)
+      toast.success(`"${data.titre}" ajouté au planning ✅`)
+      setOpen(false)
+      // Si on n'est pas sur le planning, proposer d'y aller
+      if (!location.pathname.startsWith('/planning')) {
+        setTimeout(() => navigate('/planning'), 500)
+      }
+      return
+    }
+
+    // Navigation vers une route (avec prefill optionnel)
+    if (action.route) {
       navigate(action.route, { state: { prefill: action.prefill } })
       setOpen(false)
     }
+  }
+
+  // ── ANALYSER L'ACTIVITÉ ──────────────────────────────
+  function handleAnalyse() {
+    const prompt = promptAnalyseActivite(kpis, clients, devis, factures)
+    sendMessage(prompt)
   }
 
   function handleKeyDown(e) {
@@ -168,7 +204,7 @@ export default function AIAssistant() {
     }
   }
 
-  // ── RENDER ────────────────────────────────────────────────
+  // ── RENDER ───────────────────────────────────────────
   return (
     <>
       {/* Bouton flottant */}
@@ -176,7 +212,7 @@ export default function AIAssistant() {
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setOpen(o => !o)}
-        className="fixed bottom-20 md:bottom-6 right-4 md:right-6 w-12 h-12 bg-amber-500 hover:bg-amber-400 rounded-full shadow-2xl flex items-center justify-center z-40 text-black"
+        className="fixed bottom-20 md:bottom-6 right-4 md:right-6 w-12 h-12 bg-amber-500 hover:bg-amber-400 rounded-full shadow-2xl flex items-center justify-center z-50 text-black"
       >
         <AnimatePresence mode="wait" initial={false}>
           {open
@@ -194,7 +230,7 @@ export default function AIAssistant() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="fixed bottom-36 md:bottom-20 right-4 md:right-6 w-80 md:w-96 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl z-40 flex flex-col"
+            className="fixed bottom-36 md:bottom-24 right-2 left-2 md:left-auto md:right-6 md:w-[400px] bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl z-50 flex flex-col"
             style={{ maxHeight: '72vh' }}
           >
             {/* Header */}
@@ -206,10 +242,8 @@ export default function AIAssistant() {
                 <p className="text-white text-sm font-semibold">Assistant IA</p>
                 <p className="text-slate-500 text-xs truncate">
                   {isListening
-                    ? voiceCountdown !== null
-                      ? `Envoi dans ${voiceCountdown}s…`
-                      : 'En écoute…'
-                    : 'Propulsé par Groq'}
+                    ? voiceCountdown != null ? `Envoi dans ${voiceCountdown}s…` : 'En écoute…'
+                    : 'Propulsé par Groq · Llama 3.3'}
                 </p>
               </div>
               <button
@@ -224,10 +258,10 @@ export default function AIAssistant() {
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
               {messages.length === 0 && (
-                <div className="flex flex-col items-center gap-3 py-4">
-                  <p className="text-slate-400 text-sm text-center">Comment puis-je vous aider ?</p>
+                <div className="flex flex-col gap-3">
+                  {/* Bouton analyse rapide */}
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
+                    whileHover={{ scale: 1.01 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={handleAnalyse}
                     disabled={loading}
@@ -237,6 +271,25 @@ export default function AIAssistant() {
                     <span>Analyser mon activité</span>
                     <ArrowRight size={13} className="ml-auto" />
                   </motion.button>
+
+                  {/* Suggestions contextuelles par page */}
+                  <div className="space-y-1.5">
+                    {suggestions.map((s, i) => (
+                      <motion.button
+                        key={i}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.06 }}
+                        whileHover={{ x: 3 }}
+                        onClick={() => sendMessage(s)}
+                        disabled={loading}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-left text-slate-400 hover:text-white hover:bg-slate-700/60 rounded-xl text-xs transition-colors disabled:opacity-50"
+                      >
+                        <ChevronRight size={12} className="text-amber-500/60 flex-shrink-0" />
+                        {s}
+                      </motion.button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -247,39 +300,44 @@ export default function AIAssistant() {
                   animate={{ opacity: 1, y: 0 }}
                   className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}
                 >
-                  <div
-                    className={`max-w-[88%] px-3 py-2 rounded-xl text-sm leading-relaxed whitespace-pre-wrap ${
-                      m.role === 'user'
-                        ? 'bg-amber-500 text-black'
-                        : 'bg-slate-700 text-white'
-                    }`}
-                  >
-                    {m.content}
+                  <div className={`max-w-[90%] px-3 py-2.5 rounded-xl text-sm leading-relaxed ${
+                    m.role === 'user'
+                      ? 'bg-amber-500 text-black font-medium'
+                      : 'bg-slate-700 text-white space-y-1'
+                  }`}>
+                    {m.role === 'assistant'
+                      ? <div className="space-y-0.5">{renderMarkdown(m.content)}</div>
+                      : m.content
+                    }
                   </div>
+
                   {/* Bouton d'action */}
                   {m.action && (
                     <motion.button
                       initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.2 }}
+                      transition={{ delay: 0.25 }}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.97 }}
                       onClick={() => handleAction(m.action)}
-                      className="mt-2 flex items-center gap-2 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-black text-xs font-semibold rounded-xl transition-colors"
+                      className={`mt-2 flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-xl transition-colors ${
+                        m.action.type === 'intervention'
+                          ? 'bg-emerald-500 hover:bg-emerald-400 text-white'
+                          : 'bg-amber-500 hover:bg-amber-400 text-black'
+                      }`}
                     >
                       <ArrowRight size={13} />
                       {m.action.label}
+                      {m.action.type === 'intervention' && (
+                        <span className="ml-1 opacity-80">→ Planning</span>
+                      )}
                     </motion.button>
                   )}
                 </motion.div>
               ))}
 
               {loading && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex justify-start"
-                >
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
                   <div className="bg-slate-700 px-3 py-2 rounded-xl">
                     <div className="flex gap-1 items-center">
                       {[0, 1, 2].map(i => (
@@ -313,8 +371,8 @@ export default function AIAssistant() {
                       transition={{ duration: 1, repeat: Infinity }}
                     />
                     <p className="text-red-400 text-xs">
-                      {voiceCountdown !== null
-                        ? `Envoi automatique dans ${voiceCountdown}s — continuez à parler pour annuler`
+                      {voiceCountdown != null
+                        ? `Envoi dans ${voiceCountdown}s — continuez à parler pour annuler`
                         : 'En écoute… parlez maintenant'}
                     </p>
                   </div>
@@ -338,7 +396,7 @@ export default function AIAssistant() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={toggleListening}
-                  title={isListening ? 'Arrêter l\'écoute' : 'Parler'}
+                  title={isListening ? "Arrêter l'écoute" : 'Parler'}
                   className={`w-9 h-9 flex items-center justify-center rounded-xl flex-shrink-0 transition-colors ${
                     isListening
                       ? 'bg-red-500 hover:bg-red-400 text-white'

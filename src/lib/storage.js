@@ -6,6 +6,8 @@ const KEYS = {
   DEVIS: 'elecpro_devis',
   FACTURES: 'elecpro_factures',
   SETTINGS: 'elecpro_settings',
+  INTERVENTIONS: 'elecpro_interventions',
+  TRESORERIE: 'elecpro_tresorerie',
 }
 
 // Lecture générique
@@ -139,6 +141,109 @@ export function getPrestations() {
 }
 export function savePrestations(list) {
   set('elecpro_prestations', list)
+}
+
+// ── INTERVENTIONS (planning) ─────────────────────────────
+export function getInterventions() {
+  return get(KEYS.INTERVENTIONS) || []
+}
+export function saveInterventions(list) {
+  set(KEYS.INTERVENTIONS, list)
+}
+
+// ── TRÉSORERIE ───────────────────────────────────────────
+const DEFAULT_TRESORERIE = {
+  solde: 0,
+  date_solde: '',
+  charges: [], // [{id, nom, montant, frequence (mensuel|trimestriel|annuel), jour, actif}]
+  depenses: [], // [{id, nom, montant, date, categorie, note}] — dépenses ponctuelles
+  fiscal: {
+    regime: 'micro_bic', // micro_bic | micro_bnc | reel_is | reel_ir
+    versement_liberatoire: false,
+    taux_ir: 11, // tranche IR personnalisée
+  },
+}
+export function getTresorerie() {
+  const saved = get(KEYS.TRESORERIE)
+  if (!saved) return DEFAULT_TRESORERIE
+  return {
+    ...DEFAULT_TRESORERIE,
+    ...saved,
+    depenses: saved.depenses || [],
+    fiscal: { ...DEFAULT_TRESORERIE.fiscal, ...(saved.fiscal || {}) },
+  }
+}
+export function saveTresorerie(data) {
+  set(KEYS.TRESORERIE, data)
+}
+
+// ── TOKENS SIGNATURE À DISTANCE ──────────────────────────
+// Fallback localStorage (même appareil / dev local).
+// En production avec Supabase, les tokens sont stockés en base.
+
+function genToken() {
+  const array = new Uint8Array(32)
+  crypto.getRandomValues(array)
+  return Array.from(array, b => b.toString(16).padStart(2, '0')).join('')
+}
+
+export function createLocalSignToken(devisId, devisData, settingsData) {
+  const token = genToken()
+  const record = {
+    token,
+    devis_id: devisId,
+    devis_data: devisData,
+    settings_data: settingsData,
+    expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    signature_data: null,
+    signataire: null,
+    signed_at: null,
+    applied: false,
+    created_at: new Date().toISOString(),
+  }
+  const all = get('elecpro_devis_tokens') || []
+  const filtered = all.filter(t => t.devis_id !== devisId) // un seul token actif par devis
+  filtered.push(record)
+  set('elecpro_devis_tokens', filtered)
+  return token
+}
+
+export function getLocalSignToken(token) {
+  const all = get('elecpro_devis_tokens') || []
+  return all.find(t => t.token === token) || null
+}
+
+export function getLocalSignTokenByDevisId(devisId) {
+  const all = get('elecpro_devis_tokens') || []
+  return all.find(t => t.devis_id === devisId && !t.applied) || null
+}
+
+export function applyLocalRemoteSignature(token, signatureData, signataire) {
+  const all = get('elecpro_devis_tokens') || []
+  const idx = all.findIndex(t => t.token === token)
+  if (idx === -1) return false
+  all[idx] = {
+    ...all[idx],
+    signature_data: signatureData,
+    signataire,
+    signed_at: new Date().toISOString(),
+  }
+  set('elecpro_devis_tokens', all)
+  return true
+}
+
+export function markLocalTokenApplied(token) {
+  const all = get('elecpro_devis_tokens') || []
+  const idx = all.findIndex(t => t.token === token)
+  if (idx !== -1) {
+    all[idx].applied = true
+    set('elecpro_devis_tokens', all)
+  }
+}
+
+export function getPendingLocalSignature(devisId) {
+  const all = get('elecpro_devis_tokens') || []
+  return all.find(t => t.devis_id === devisId && t.signature_data && !t.applied) || null
 }
 
 // ── UTILITAIRES ──────────────────────────────────────────

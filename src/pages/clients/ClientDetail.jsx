@@ -41,7 +41,7 @@ export default function ClientDetail() {
 
   return (
     <PageTransition>
-      <div className="p-4 md:p-6 max-w-4xl mx-auto pb-24 md:pb-6">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto pb-8">
         {/* En-tête */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">

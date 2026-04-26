@@ -7,6 +7,9 @@ import {
   sbGetFactures, sbInsertFacture, sbUpdateFacture, sbDeleteFacture,
   sbGetPrestations, sbInsertPrestation, sbInsertPrestationsBulk, sbUpdatePrestation, sbDeletePrestation,
   sbGetSettings, sbSaveSettings,
+  sbGetInterventions, sbInsertIntervention, sbUpdateIntervention, sbDeleteIntervention,
+  sbGetTresorerie, sbSaveTresorerie,
+  sbGetUser, isSupabaseConfigured,
 } from '../lib/supabase'
 import {
   getClients, saveClients,
@@ -15,6 +18,8 @@ import {
   getFactures, saveFactures,
   getPrestations, savePrestations,
   getSettings, saveSettings,
+  getInterventions, saveInterventions,
+  getTresorerie, saveTresorerie,
   genId, genNumeroDevis, genNumeroFacture,
 } from '../lib/storage'
 import { PRESTATIONS as DEFAULT_PRESTATIONS } from '../data/prestations'
@@ -30,6 +35,8 @@ export function AppProvider({ children }) {
   const [factures, setFacturesState] = useState([])
   const [prestations, setPrestationsState] = useState([])
   const [settings, setSettingsState] = useState(null)
+  const [interventions, setInterventionsState] = useState([])
+  const [tresorerie, setTresorerieState] = useState(null)
   const [loading, setLoading] = useState(true)
   const [syncError, setSyncError] = useState(null)
 
@@ -101,6 +108,26 @@ export function AppProvider({ children }) {
         }
         setSettingsState(getSettings())
       } finally {
+        // Interventions
+        try {
+          const sbIntvs = await sbGetInterventions()
+          setInterventionsState(sbIntvs)
+          saveInterventions(sbIntvs)
+        } catch {
+          setInterventionsState(getInterventions())
+        }
+        // Trésorerie
+        try {
+          const sbTreso = await sbGetTresorerie()
+          if (sbTreso) {
+            setTresorerieState(sbTreso)
+            saveTresorerie(sbTreso)
+          } else {
+            setTresorerieState(getTresorerie())
+          }
+        } catch {
+          setTresorerieState(getTresorerie())
+        }
         setLoading(false)
       }
     }
@@ -392,6 +419,57 @@ export function AppProvider({ children }) {
     try { await sbDeletePrestation(id) } catch (err) { console.warn('Supabase deletePrestation:', err.message) }
   }, [])
 
+  // ── INTERVENTIONS ─────────────────────────────────────
+  const addIntervention = useCallback(async (data) => {
+    const item = { ...data, id: genId(), created_at: new Date().toISOString() }
+    setInterventionsState(prev => {
+      const next = [item, ...prev]
+      saveInterventions(next)
+      return next
+    })
+    if (isSupabaseConfigured) {
+      try {
+        const user = await sbGetUser()
+        if (user) await sbInsertIntervention({ ...item, user_id: user.id })
+      } catch (err) { console.warn('Supabase addIntervention:', err.message) }
+    }
+    return item
+  }, [])
+
+  const updateIntervention = useCallback(async (id, data) => {
+    setInterventionsState(prev => {
+      const next = prev.map(i => i.id === id ? { ...i, ...data } : i)
+      saveInterventions(next)
+      return next
+    })
+    if (isSupabaseConfigured) {
+      try { await sbUpdateIntervention(id, data) } catch (err) { console.warn('Supabase updateIntervention:', err.message) }
+    }
+  }, [])
+
+  const deleteIntervention = useCallback(async (id) => {
+    setInterventionsState(prev => {
+      const next = prev.filter(i => i.id !== id)
+      saveInterventions(next)
+      return next
+    })
+    if (isSupabaseConfigured) {
+      try { await sbDeleteIntervention(id) } catch (err) { console.warn('Supabase deleteIntervention:', err.message) }
+    }
+  }, [])
+
+  // ── TRÉSORERIE ────────────────────────────────────────
+  const updateTresorerie = useCallback(async (data) => {
+    setTresorerieState(prev => {
+      const next = { ...prev, ...data }
+      saveTresorerie(next)
+      if (isSupabaseConfigured) {
+        sbSaveTresorerie(next).catch(err => console.warn('Supabase saveTresorerie:', err.message))
+      }
+      return next
+    })
+  }, [])
+
   // ── SETTINGS ─────────────────────────────────────────
   const updateSettings = useCallback(async (data) => {
     setSettingsState(prev => {
@@ -436,13 +514,17 @@ export function AppProvider({ children }) {
   }, [factures, devis])
 
   const value = {
-    clients, chantiers, devis, factures, prestations, settings, loading, syncError,
+    clients, chantiers, devis, factures, prestations, settings,
+    interventions, tresorerie,
+    loading, syncError,
     addClient, updateClient, deleteClient,
     addChantier, updateChantier, deleteChantier,
     addDevis, updateDevis, deleteDevis,
     addFacture, updateFacture, deleteFacture,
     devisToFacture,
     addPrestation, updatePrestation, deletePrestation,
+    addIntervention, updateIntervention, deleteIntervention,
+    updateTresorerie,
     updateSettings,
     getKpis,
   }

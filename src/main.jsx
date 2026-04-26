@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast'
 import './index.css'
 
 import { AppProvider } from './context/AppContext'
+import AuthGuard from './components/layout/AuthGuard'
 import App from './App'
 
 // Pages
@@ -23,45 +24,72 @@ import FacturesList from './pages/factures/FacturesList'
 import FactureDetail from './pages/factures/FactureDetail'
 import FactureForm from './pages/factures/FactureForm'
 import Parametres from './pages/parametres/Parametres'
+import ExportCompta from './pages/comptabilite/ExportCompta'
+import Planning from './pages/planning/Planning'
+import Tresorerie from './pages/tresorerie/Tresorerie'
+import Fiscal from './pages/fiscal/Fiscal'
+// Page publique (sans auth)
+import SignerPage from './pages/signer/SignerPage'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AppProvider>
+        {/* ── Route publique — hors AuthGuard ─────────────── */}
         <Routes>
-          <Route path="/" element={<App />}>
-            <Route index element={<Dashboard />} />
+          <Route path="/signer/:token" element={<SignerPage />} />
 
-            {/* Clients */}
-            <Route path="clients" element={<ClientsList />} />
-            <Route path="clients/nouveau" element={<ClientForm />} />
-            <Route path="clients/:id" element={<ClientDetail />} />
-            <Route path="clients/:id/modifier" element={<ClientForm />} />
+          {/* ── Routes protégées ──────────────────────────── */}
+          <Route path="/*" element={
+            <AuthGuard>
+              <Routes>
+                <Route path="/" element={<App />}>
+                  <Route index element={<Dashboard />} />
 
-            {/* Chantiers */}
-            <Route path="chantiers" element={<ChantiersList />} />
-            <Route path="chantiers/nouveau" element={<ChantierForm />} />
-            <Route path="chantiers/:id" element={<ChantierDetail />} />
-            <Route path="chantiers/:id/modifier" element={<ChantierForm />} />
+                  {/* Clients */}
+                  <Route path="clients" element={<ClientsList />} />
+                  <Route path="clients/nouveau" element={<ClientForm />} />
+                  <Route path="clients/:id" element={<ClientDetail />} />
+                  <Route path="clients/:id/modifier" element={<ClientForm />} />
 
-            {/* Devis */}
-            <Route path="devis" element={<DevisList />} />
-            <Route path="devis/nouveau" element={<DevisForm />} />
-            <Route path="devis/:id" element={<DevisDetail />} />
-            <Route path="devis/:id/modifier" element={<DevisForm />} />
+                  {/* Chantiers */}
+                  <Route path="chantiers" element={<ChantiersList />} />
+                  <Route path="chantiers/nouveau" element={<ChantierForm />} />
+                  <Route path="chantiers/:id" element={<ChantierDetail />} />
+                  <Route path="chantiers/:id/modifier" element={<ChantierForm />} />
 
-            {/* Factures */}
-            <Route path="factures" element={<FacturesList />} />
-            <Route path="factures/nouveau" element={<FactureForm />} />
-            <Route path="factures/:id" element={<FactureDetail />} />
-            <Route path="factures/:id/modifier" element={<FactureForm />} />
+                  {/* Devis */}
+                  <Route path="devis" element={<DevisList />} />
+                  <Route path="devis/nouveau" element={<DevisForm />} />
+                  <Route path="devis/:id" element={<DevisDetail />} />
+                  <Route path="devis/:id/modifier" element={<DevisForm />} />
 
-            {/* Paramètres */}
-            <Route path="parametres" element={<Parametres />} />
-          </Route>
+                  {/* Factures */}
+                  <Route path="factures" element={<FacturesList />} />
+                  <Route path="factures/nouveau" element={<FactureForm />} />
+                  <Route path="factures/:id" element={<FactureDetail />} />
+                  <Route path="factures/:id/modifier" element={<FactureForm />} />
+
+                  {/* Comptabilité */}
+                  <Route path="comptabilite" element={<ExportCompta />} />
+
+                  {/* Planning */}
+                  <Route path="planning" element={<Planning />} />
+
+                  {/* Trésorerie */}
+                  <Route path="tresorerie" element={<Tresorerie />} />
+
+                  {/* Prévisionnel Fiscal */}
+                  <Route path="fiscal" element={<Fiscal />} />
+
+                  {/* Paramètres */}
+                  <Route path="parametres" element={<Parametres />} />
+                </Route>
+              </Routes>
+            </AuthGuard>
+          } />
         </Routes>
 
-        {/* Système de notifications */}
         <Toaster
           position="top-right"
           toastOptions={{
@@ -74,15 +102,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               fontSize: '14px',
               boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
             },
-            success: {
-              iconTheme: { primary: '#10B981', secondary: '#fff' },
-            },
-            error: {
-              iconTheme: { primary: '#EF4444', secondary: '#fff' },
-            },
+            success: { iconTheme: { primary: '#10B981', secondary: '#fff' } },
+            error: { iconTheme: { primary: '#EF4444', secondary: '#fff' } },
           }}
         />
       </AppProvider>
     </BrowserRouter>
-  </React.StrictMode>
+  </React.StrictMode>,
 )

@@ -118,7 +118,7 @@ export default function FactureForm() {
 
   return (
     <PageTransition>
-      <div className="p-4 md:p-6 max-w-4xl mx-auto pb-24 md:pb-6">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto pb-8">
         <div className="flex items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="text-slate-400 hover:text-white transition-colors">
