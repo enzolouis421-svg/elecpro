@@ -1,30 +1,74 @@
-// Détail chantier — étapes, notes, photos
-import { useState } from 'react'
+// Détail chantier — étapes, notes, photos, coûts (devis + dépenses)
+import { useState, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, Edit, Trash2, Plus, CheckCircle2, Circle,
-  StickyNote, Camera, MapPin, Calendar,
+  StickyNote, Camera, MapPin, Calendar, Euro, Receipt, ExternalLink, ImagePlus,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useApp } from '../../context/AppContext'
-import { formatDate, today } from '../../lib/utils'
+import { formatDate, today, formatMontant, calculerTotaux } from '../../lib/utils'
 import { genId } from '../../lib/storage'
 import PageTransition from '../../components/layout/PageTransition'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 
+const CATEGORIES_DEPENSE = [
+  { id: 'essence', label: 'Essence' },
+  { id: 'peage', label: 'Péage' },
+  { id: 'parking', label: 'Parking' },
+  { id: 'fournitures', label: 'Fournitures' },
+  { id: 'location', label: 'Location matériel' },
+  { id: 'autre', label: 'Autre' },
+]
+
+function labelCategorie(id) {
+  return CATEGORIES_DEPENSE.find(c => c.id === id)?.label || id
+}
+
 export default function ChantierDetail() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { chantiers, clients, updateChantier, deleteChantier } = useApp()
+  const { chantiers, clients, devis, updateChantier, deleteChantier } = useApp()
   const [showDelete, setShowDelete] = useState(false)
   const [nouvelleEtape, setNouvelleEtape] = useState('')
   const [nouvelleNote, setNouvelleNote] = useState('')
   const [onglet, setOnglet] = useState('etapes')
+  const [formDepense, setFormDepense] = useState({
+    libelle: '',
+    montant: '',
+    categorie: 'essence',
+    date: today(),
+    photos: [],
+  })
+  const [dragCout, setDragCout] = useState(false)
 
   const chantier = chantiers.find(c => c.id === id)
+
+  const devisDuChantier = useMemo(() => {
+    if (!chantier) return []
+    return devis.filter(d => d.chantier_id === chantier.id).sort((a, b) =>
+      new Date(b.created_at || b.date_emission || 0) - new Date(a.created_at || a.date_emission || 0)
+    )
+  }, [devis, chantier])
+
+  const totalPrevuDevisTTC = useMemo(() => {
+    let sum = 0
+    for (const d of devisDuChantier) {
+      const t = calculerTotaux(d.lignes || [], d.remise_type, d.remise_valeur, d.acompte_type, d.acompte_valeur)
+      sum += t.total_ttc || 0
+    }
+    return sum
+  }, [devisDuChantier])
+
+  const depensesChantier = chantier?.depenses_chantier || []
+  const totalDepensesSupp = useMemo(
+    () => depensesChantier.reduce((s, x) => s + (parseFloat(x.montant_ttc) || 0), 0),
+    [depensesChantier]
+  )
+
   if (!chantier) {
     return (
       <div className="p-6 text-center text-slate-400">
@@ -92,6 +136,75 @@ export default function ChantierDetail() {
   function supprimerPhoto(photoId) {
     const photos = chantier.photos.filter(p => p.id !== photoId)
     updateChantier(id, { photos })
+  }
+
+  // ── COÛTS / DÉPENSES SUPPLÉMENTAIRES ─────────────────────
+  function appendPhotosToFormDepense(files) {
+    const imgs = [...files].filter(f => f.type.startsWith('image/'))
+    if (!imgs.length) return
+    Promise.all(
+      imgs.map(
+        f =>
+          new Promise(resolve => {
+            const r = new FileReader()
+            r.onload = () => resolve({ id: genId(), base64: r.result, legende: f.name })
+            r.readAsDataURL(f)
+          })
+      )
+    ).then(newPhotos => {
+      setFormDepense(f => ({ ...f, photos: [...f.photos, ...newPhotos] }))
+      toast.success(newPhotos.length > 1 ? `${newPhotos.length} images ajoutées` : 'Image ajoutée')
+    })
+  }
+
+  function retirerPhotoFormDepense(photoId) {
+    setFormDepense(f => ({ ...f, photos: f.photos.filter(p => p.id !== photoId) }))
+  }
+
+  function ajouterDepense() {
+    const montant = parseFloat(String(formDepense.montant).replace(',', '.')) || 0
+    if (montant <= 0) {
+      toast.error('Indiquez un montant supérieur à 0')
+      return
+    }
+    const lib = formDepense.libelle.trim() || (formDepense.photos.length ? 'Ticket' : '')
+    if (!lib) {
+      toast.error('Ajoutez un libellé ou une photo de ticket')
+      return
+    }
+    const row = {
+      id: genId(),
+      date: formDepense.date || today(),
+      categorie: formDepense.categorie,
+      libelle: lib,
+      montant_ttc: montant,
+      photos: formDepense.photos,
+    }
+    const next = [...depensesChantier, row]
+    updateChantier(id, { depenses_chantier: next })
+    setFormDepense({ libelle: '', montant: '', categorie: 'essence', date: today(), photos: [] })
+    toast.success('Coût enregistré')
+  }
+
+  function supprimerDepense(depId) {
+    updateChantier(id, { depenses_chantier: depensesChantier.filter(d => d.id !== depId) })
+    toast.success('Coût supprimé')
+  }
+
+  function handleDropCout(e) {
+    e.preventDefault()
+    setDragCout(false)
+    appendPhotosToFormDepense(e.dataTransfer.files)
+  }
+
+  function handleDragOverCout(e) {
+    e.preventDefault()
+    setDragCout(true)
+  }
+
+  function handleDragLeaveCout(e) {
+    e.preventDefault()
+    setDragCout(false)
   }
 
   function handleDelete() {
@@ -169,25 +282,30 @@ export default function ChantierDetail() {
         </div>
 
         {/* Onglets */}
-        <div className="flex gap-1 bg-slate-800/50 rounded-xl p-1 mb-5">
+        <div className="flex gap-1 bg-slate-800/50 rounded-xl p-1 mb-5 flex-wrap sm:flex-nowrap">
           {[
             { id: 'etapes', label: 'Étapes', count: chantier.etapes?.length },
             { id: 'notes', label: 'Notes', count: chantier.notes?.length },
             { id: 'photos', label: 'Photos', count: chantier.photos?.length },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setOnglet(tab.id)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                onglet === tab.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              {tab.label}
-              {tab.count > 0 && (
-                <span className="bg-slate-600 text-xs rounded-full px-1.5">{tab.count}</span>
-              )}
-            </button>
-          ))}
+            { id: 'couts', label: 'Coûts', count: depensesChantier.length, icon: Euro },
+          ].map(tab => {
+            const Icon = tab.icon
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setOnglet(tab.id)}
+                className={`flex-1 min-w-[calc(50%-4px)] sm:min-w-0 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                  onglet === tab.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {Icon && <Icon size={14} className="opacity-80" />}
+                {tab.label}
+                {tab.count > 0 && (
+                  <span className="bg-slate-600 text-xs rounded-full px-1.5">{tab.count}</span>
+                )}
+              </button>
+            )
+          })}
         </div>
 
         {/* Étapes */}
@@ -272,6 +390,243 @@ export default function ChantierDetail() {
                 <input type="file" accept="image/*" onChange={ajouterPhoto} className="hidden" />
               </label>
             </div>
+          </motion.div>
+        )}
+
+        {/* Coûts — prévu (devis) + dépenses supplémentaires */}
+        {onglet === 'couts' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+            {/* Synthèse */}
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+                <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Chiffrage devis (TTC)</p>
+                <p className="text-2xl font-bold text-white">{formatMontant(totalPrevuDevisTTC)}</p>
+                <p className="text-slate-500 text-xs mt-1">
+                  {devisDuChantier.length} devis lié{devisDuChantier.length > 1 ? 's' : ''} à ce chantier
+                </p>
+              </div>
+              <div className="bg-slate-800 border border-amber-500/30 rounded-xl p-4">
+                <p className="text-slate-500 text-xs uppercase tracking-wide mb-1">Coûts terrain (tickets & saisies)</p>
+                <p className="text-2xl font-bold text-amber-400">{formatMontant(totalDepensesSupp)}</p>
+                <p className="text-slate-500 text-xs mt-1">{depensesChantier.length} ligne{depensesChantier.length > 1 ? 's' : ''}</p>
+              </div>
+            </div>
+
+            {/* Détail devis */}
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Receipt size={18} className="text-amber-400" />
+                <h2 className="text-white font-semibold">Matériel & prestations (devis)</h2>
+              </div>
+              {devisDuChantier.length === 0 ? (
+                <p className="text-slate-400 text-sm">
+                  Aucun devis n’est lié à ce chantier. Ouvrez un devis, choisissez ce chantier dans le formulaire, puis enregistrez — les lignes apparaîtront ici automatiquement.
+                </p>
+              ) : (
+                <div className="space-y-5">
+                  {devisDuChantier.map(d => {
+                    const tot = calculerTotaux(d.lignes || [], d.remise_type, d.remise_valeur, d.acompte_type, d.acompte_valeur)
+                    return (
+                      <div key={d.id} className="border border-slate-600 rounded-xl overflow-hidden">
+                        <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900/80 px-3 py-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-white font-mono text-sm font-semibold">{d.numero}</span>
+                            <Badge statut={d.statut} type="devis" />
+                            <span className="text-slate-400 text-xs">{d.objet || 'Sans objet'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-amber-400 font-bold text-sm">{formatMontant(tot.total_ttc)} TTC</span>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/devis/${d.id}`)}
+                              className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+                              title="Voir le devis"
+                            >
+                              <ExternalLink size={16} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-slate-500 border-b border-slate-700">
+                                <th className="text-left py-2 px-3 font-medium">Description</th>
+                                <th className="text-center py-2 px-2 font-medium w-12">Qté</th>
+                                <th className="text-right py-2 px-2 font-medium">PU HT</th>
+                                <th className="text-center py-2 px-2 font-medium w-10">TVA</th>
+                                <th className="text-right py-2 px-3 font-medium">Total HT</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(d.lignes || []).map((ligne, idx) => {
+                                if (ligne.type === 'titre') {
+                                  return (
+                                    <tr key={idx} className="bg-slate-700/40">
+                                      <td colSpan={5} className="py-2 px-3 font-semibold text-slate-200">{ligne.description}</td>
+                                    </tr>
+                                  )
+                                }
+                                if (ligne.type === 'commentaire') {
+                                  return (
+                                    <tr key={idx}>
+                                      <td colSpan={5} className="py-1 px-3 text-slate-500 italic">{ligne.description}</td>
+                                    </tr>
+                                  )
+                                }
+                                const ht = (parseFloat(ligne.quantite) || 0) * (parseFloat(ligne.prix_ht) || 0)
+                                return (
+                                  <tr key={idx} className="border-b border-slate-700/50 text-slate-300">
+                                    <td className="py-2 px-3">{ligne.description}</td>
+                                    <td className="text-center py-2 px-2">{ligne.quantite}</td>
+                                    <td className="text-right py-2 px-2">{formatMontant(ligne.prix_ht)}</td>
+                                    <td className="text-center py-2 px-2 text-slate-500">{ligne.tva}%</td>
+                                    <td className="text-right py-2 px-3 text-white">{formatMontant(ht)}</td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Ajouter coût */}
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+              <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+                <ImagePlus size={18} className="text-amber-400" />
+                Ajouter un coût (essence, péage, fournitures…)
+              </h2>
+              <div
+                onDragOver={handleDragOverCout}
+                onDragLeave={handleDragLeaveCout}
+                onDrop={handleDropCout}
+                className={`mb-4 rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
+                  dragCout ? 'border-amber-500 bg-amber-500/10' : 'border-slate-600 bg-slate-900/50'
+                }`}
+              >
+                <p className="text-slate-400 text-sm mb-2">Glissez-déposez des photos de tickets ici</p>
+                <label className="inline-flex items-center gap-2 text-amber-400 text-sm cursor-pointer hover:underline">
+                  <span>ou parcourir les fichiers</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={e => {
+                      appendPhotosToFormDepense(e.target.files)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+              </div>
+
+              {formDepense.photos.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {formDepense.photos.map(p => (
+                    <div key={p.id} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-600">
+                      <img src={p.base64} alt="" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => retirerPhotoFormDepense(p.id)}
+                        className="absolute top-0 right-0 bg-black/60 text-white text-xs px-1 rounded-bl"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="text-slate-400 text-xs block mb-1">Catégorie</label>
+                  <select
+                    value={formDepense.categorie}
+                    onChange={e => setFormDepense(f => ({ ...f, categorie: e.target.value }))}
+                    className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+                  >
+                    {CATEGORIES_DEPENSE.map(c => (
+                      <option key={c.id} value={c.id}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-400 text-xs block mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={formDepense.date}
+                    onChange={e => setFormDepense(f => ({ ...f, date: e.target.value }))}
+                    className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3 mb-4">
+                <div className="sm:col-span-2">
+                  <label className="text-slate-400 text-xs block mb-1">Libellé (optionnel si ticket photo)</label>
+                  <input
+                    value={formDepense.libelle}
+                    onChange={e => setFormDepense(f => ({ ...f, libelle: e.target.value }))}
+                    placeholder="Ex. Plein autoroute A6, Péage Lyon…"
+                    className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none placeholder-slate-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 text-xs block mb-1">Montant TTC (€)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={formDepense.montant}
+                    onChange={e => setFormDepense(f => ({ ...f, montant: e.target.value }))}
+                    placeholder="0,00"
+                    className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none placeholder-slate-500"
+                  />
+                </div>
+              </div>
+              <Button onClick={ajouterDepense}><Plus size={16} /> Enregistrer ce coût</Button>
+            </div>
+
+            {/* Liste dépenses */}
+            {depensesChantier.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-slate-400 text-sm font-medium uppercase tracking-wide">Dépenses enregistrées</h3>
+                {depensesChantier.map(dep => (
+                  <div
+                    key={dep.id}
+                    className="flex flex-wrap items-start gap-3 bg-slate-800 border border-slate-700 rounded-xl p-4"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-slate-500 bg-slate-700 px-2 py-0.5 rounded">{labelCategorie(dep.categorie)}</span>
+                        <span className="text-slate-500 text-xs">{formatDate(dep.date)}</span>
+                      </div>
+                      <p className="text-white font-medium mt-1">{dep.libelle}</p>
+                      <p className="text-amber-400 font-bold text-lg mt-1">{formatMontant(dep.montant_ttc)}</p>
+                      {dep.photos?.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {dep.photos.map(ph => (
+                            <a key={ph.id} href={ph.base64} target="_blank" rel="noopener noreferrer" className="block w-14 h-14 rounded-lg overflow-hidden border border-slate-600">
+                              <img src={ph.base64} alt="" className="w-full h-full object-cover" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => supprimerDepense(dep.id)}
+                      className="text-slate-500 hover:text-red-400 p-1"
+                      title="Supprimer"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
 
