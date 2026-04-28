@@ -28,8 +28,9 @@ import ExportCompta from './pages/comptabilite/ExportCompta'
 import Planning from './pages/planning/Planning'
 import Tresorerie from './pages/tresorerie/Tresorerie'
 import Fiscal from './pages/fiscal/Fiscal'
-// Page publique (sans auth)
+// Pages publiques (sans auth)
 import SignerPage from './pages/signer/SignerPage'
+import ResetPassword from './pages/auth/ResetPassword'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -38,6 +39,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         {/* ── Route publique — hors AuthGuard ─────────────── */}
         <Routes>
           <Route path="/signer/:token" element={<SignerPage />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* ── Routes protégées ──────────────────────────── */}
           <Route path="/*" element={
