@@ -17,6 +17,8 @@ export default function DocumentPreview({ doc, type = 'devis', id = 'doc-preview
 
   const isFacture = type === 'facture'
   const titre = isFacture ? `FACTURE N° ${doc.numero}` : `DEVIS N° ${doc.numero}`
+  const franchiseTVA = fact.franchise_tva ?? false
+  const penalitesRetard = fact.penalites_retard ?? true
 
   return (
     <div
@@ -114,16 +116,17 @@ export default function DocumentPreview({ doc, type = 'devis', id = 'doc-preview
             <th style={{ textAlign: 'center', padding: '4px 6px', fontWeight: 600, width: '30px' }}>Qté</th>
             <th style={{ textAlign: 'center', padding: '4px 6px', fontWeight: 600, width: '40px' }}>Unité</th>
             <th style={{ textAlign: 'right', padding: '4px 6px', fontWeight: 600, width: '60px' }}>PU HT</th>
-            <th style={{ textAlign: 'center', padding: '4px 6px', fontWeight: 600, width: '35px' }}>TVA</th>
-            <th style={{ textAlign: 'right', padding: '4px 6px', fontWeight: 600, width: '65px' }}>Total HT</th>
+            {!franchiseTVA && <th style={{ textAlign: 'center', padding: '4px 6px', fontWeight: 600, width: '35px' }}>TVA</th>}
+            <th style={{ textAlign: 'right', padding: '4px 6px', fontWeight: 600, width: '65px' }}>{franchiseTVA ? 'Total' : 'Total HT'}</th>
           </tr>
         </thead>
         <tbody>
           {(doc.lignes || []).map((ligne, idx) => {
+            const colSpan = franchiseTVA ? 5 : 6
             if (ligne.type === 'titre') {
               return (
                 <tr key={idx} style={{ background: '#f0f0f0' }}>
-                  <td colSpan={6} style={{ padding: '5px 6px', fontWeight: 'bold', fontSize: '8.5pt' }}>
+                  <td colSpan={colSpan} style={{ padding: '5px 6px', fontWeight: 'bold', fontSize: '8.5pt' }}>
                     {ligne.description}
                   </td>
                 </tr>
@@ -132,7 +135,7 @@ export default function DocumentPreview({ doc, type = 'devis', id = 'doc-preview
             if (ligne.type === 'commentaire') {
               return (
                 <tr key={idx}>
-                  <td colSpan={6} style={{ padding: '3px 6px', color: '#777', fontStyle: 'italic', fontSize: '7.5pt' }}>
+                  <td colSpan={colSpan} style={{ padding: '3px 6px', color: '#777', fontStyle: 'italic', fontSize: '7.5pt' }}>
                     {ligne.description}
                   </td>
                 </tr>
@@ -145,7 +148,7 @@ export default function DocumentPreview({ doc, type = 'devis', id = 'doc-preview
                 <td style={{ textAlign: 'center', padding: '4px 6px' }}>{ligne.quantite}</td>
                 <td style={{ textAlign: 'center', padding: '4px 6px', color: '#555' }}>{ligne.unite}</td>
                 <td style={{ textAlign: 'right', padding: '4px 6px' }}>{formatMontant(ligne.prix_ht)}</td>
-                <td style={{ textAlign: 'center', padding: '4px 6px', color: '#555' }}>{ligne.tva} %</td>
+                {!franchiseTVA && <td style={{ textAlign: 'center', padding: '4px 6px', color: '#555' }}>{ligne.tva} %</td>}
                 <td style={{ textAlign: 'right', padding: '4px 6px', fontWeight: 500 }}>{formatMontant(ht)}</td>
               </tr>
             )
@@ -157,25 +160,31 @@ export default function DocumentPreview({ doc, type = 'devis', id = 'doc-preview
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '5mm' }}>
         <table style={{ width: '65mm', fontSize: '8.5pt', borderCollapse: 'collapse' }}>
           <tbody>
-            <tr>
-              <td style={{ padding: '2px 0', color: '#555' }}>Sous-total HT</td>
-              <td style={{ textAlign: 'right', fontWeight: 500 }}>{formatMontant(totaux.sous_total_ht)}</td>
-            </tr>
+            {!franchiseTVA && (
+              <tr>
+                <td style={{ padding: '2px 0', color: '#555' }}>Sous-total HT</td>
+                <td style={{ textAlign: 'right', fontWeight: 500 }}>{formatMontant(totaux.sous_total_ht)}</td>
+              </tr>
+            )}
             {totaux.montant_remise > 0 && (
               <tr>
                 <td style={{ padding: '2px 0', color: '#555' }}>Remise</td>
                 <td style={{ textAlign: 'right', color: '#e53e3e' }}>- {formatMontant(totaux.montant_remise)}</td>
               </tr>
             )}
-            {Object.entries(totaux.tva_detail).map(([taux, d]) => (
+            {!franchiseTVA && Object.entries(totaux.tva_detail).map(([taux, d]) => (
               <tr key={taux}>
                 <td style={{ padding: '2px 0', color: '#555' }}>TVA {taux} %</td>
                 <td style={{ textAlign: 'right' }}>{formatMontant(d.montant)}</td>
               </tr>
             ))}
             <tr style={{ borderTop: '2px solid #1a1a1a' }}>
-              <td style={{ padding: '4px 0 2px', fontWeight: 'bold', fontSize: '10pt' }}>TOTAL TTC</td>
-              <td style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '10pt' }}>{formatMontant(totaux.total_ttc)}</td>
+              <td style={{ padding: '4px 0 2px', fontWeight: 'bold', fontSize: '10pt' }}>
+                {franchiseTVA ? 'TOTAL' : 'TOTAL TTC'}
+              </td>
+              <td style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '10pt' }}>
+                {formatMontant(franchiseTVA ? totaux.sous_total_ht - (totaux.montant_remise || 0) : totaux.total_ttc)}
+              </td>
             </tr>
             {totaux.montant_acompte > 0 && (
               <tr>
@@ -336,11 +345,27 @@ export default function DocumentPreview({ doc, type = 'devis', id = 'doc-preview
       )}
 
       {/* Mentions légales */}
-      <div style={{ fontSize: '6.5pt', color: '#999', borderTop: '1px solid #eee', paddingTop: '3mm', lineHeight: 1.5 }}>
-        {ent.siret && <span>SIRET : {ent.siret} — </span>}
-        {ent.tva_intra && <span>TVA : {ent.tva_intra} — </span>}
-        {ent.assurance && <span>Assurance : {ent.assurance} — </span>}
-        {doc.mentions_legales || fact.mentions_legales}
+      <div style={{ fontSize: '6.5pt', color: '#999', borderTop: '1px solid #eee', paddingTop: '3mm', lineHeight: 1.8 }}>
+        <div>
+          {ent.siret && <span>SIRET : {ent.siret}{ent.tva_intra || ent.assurance || franchiseTVA ? ' — ' : ''}</span>}
+          {!franchiseTVA && ent.tva_intra && <span>TVA : {ent.tva_intra}{ent.assurance ? ' — ' : ''}</span>}
+          {ent.assurance && <span>Assurance décennale : {ent.assurance}</span>}
+        </div>
+        {franchiseTVA && (
+          <div style={{ marginTop: '2px' }}>
+            TVA non applicable — art. 293 B du CGI
+          </div>
+        )}
+        {isFacture && penalitesRetard && (
+          <div style={{ marginTop: '2px' }}>
+            En cas de retard de paiement, une pénalité égale à 3 fois le taux d&apos;intérêt légal en vigueur sera appliquée, ainsi qu&apos;une indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 du Code de Commerce).
+          </div>
+        )}
+        {(doc.mentions_legales || fact.mentions_legales) && (
+          <div style={{ marginTop: '2px' }}>
+            {doc.mentions_legales || fact.mentions_legales}
+          </div>
+        )}
       </div>
     </div>
   )

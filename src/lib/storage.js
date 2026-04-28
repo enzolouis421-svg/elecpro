@@ -97,9 +97,9 @@ const DEFAULT_SETTINGS = {
     tva_defaut: 10,
     validite_devis: 30,
     delai_paiement: 30,
-    mentions_legales: 'TVA non applicable, art. 293 B du CGI. En cas de retard de paiement, une pénalité de 3 fois le taux d\'intérêt légal sera appliquée.',
-    message_email_devis: 'Veuillez trouver ci-joint notre devis. N\'hésitez pas à nous contacter pour toute question.',
-    message_email_facture: 'Veuillez trouver ci-joint notre facture. Merci de procéder au règlement dans les délais convenus.',
+    franchise_tva: false,
+    penalites_retard: true,
+    mentions_legales: '',
     couleur_document: '#F59E0B',
   },
   paiement: {

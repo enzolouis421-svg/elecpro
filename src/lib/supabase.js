@@ -60,7 +60,9 @@ export async function sbResetPassword(email) {
 
 // ── CLIENTS ──────────────────────────────────────────────
 export async function sbGetClients() {
-  const { data, error } = await sb().from('clients').select('*').order('created_at', { ascending: false })
+  const { data: { user } } = await sb().auth.getUser()
+  if (!user) return []
+  const { data, error } = await sb().from('clients').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
   if (error) throw error
   return data || []
 }
@@ -81,7 +83,9 @@ export async function sbDeleteClient(id) {
 
 // ── CHANTIERS ────────────────────────────────────────────
 export async function sbGetChantiers() {
-  const { data, error } = await sb().from('chantiers').select('*').order('created_at', { ascending: false })
+  const { data: { user } } = await sb().auth.getUser()
+  if (!user) return []
+  const { data, error } = await sb().from('chantiers').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
   if (error) throw error
   return data || []
 }
@@ -102,7 +106,9 @@ export async function sbDeleteChantier(id) {
 
 // ── DEVIS ────────────────────────────────────────────────
 export async function sbGetDevis() {
-  const { data, error } = await sb().from('devis').select('*').order('created_at', { ascending: false })
+  const { data: { user } } = await sb().auth.getUser()
+  if (!user) return []
+  const { data, error } = await sb().from('devis').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
   if (error) throw error
   return data || []
 }
@@ -123,7 +129,9 @@ export async function sbDeleteDevis(id) {
 
 // ── FACTURES ─────────────────────────────────────────────
 export async function sbGetFactures() {
-  const { data, error } = await sb().from('factures').select('*').order('created_at', { ascending: false })
+  const { data: { user } } = await sb().auth.getUser()
+  if (!user) return []
+  const { data, error } = await sb().from('factures').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
   if (error) throw error
   return data || []
 }
@@ -144,7 +152,9 @@ export async function sbDeleteFacture(id) {
 
 // ── PRESTATIONS ──────────────────────────────────────────
 export async function sbGetPrestations() {
-  const { data, error } = await sb().from('prestations').select('*').order('categorie').order('created_at')
+  const { data: { user } } = await sb().auth.getUser()
+  if (!user) return []
+  const { data, error } = await sb().from('prestations').select('*').eq('user_id', user.id).order('categorie').order('created_at')
   if (error) throw error
   return data || []
 }
@@ -184,7 +194,9 @@ export async function sbSaveSettings(settingsData, userId) {
 
 // ── INTERVENTIONS ─────────────────────────────────────────
 export async function sbGetInterventions() {
-  const { data, error } = await sb().from('interventions').select('*').order('date_debut')
+  const { data: { user } } = await sb().auth.getUser()
+  if (!user) return []
+  const { data, error } = await sb().from('interventions').select('*').eq('user_id', user.id).order('date_debut')
   if (error) throw error
   return data || []
 }

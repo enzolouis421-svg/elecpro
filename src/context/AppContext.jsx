@@ -60,37 +60,55 @@ export function AppProvider({ children }) {
           sbGetSettings(),
         ])
 
-        setClientsState(sbClients)
-        setChantiersState(sbChantiers)
-        setDevisState(sbDevis)
-        setFacturesState(sbFactures)
+        // Si Supabase renvoie des données, on les utilise et on met à jour le cache local.
+        // Si Supabase renvoie vide mais que le localStorage a des données, on garde le cache local
+        // (évite d'écraser les données locales si la sync n'a pas encore eu lieu).
+        const localClients = getClients()
+        const localChantiers = getChantiers()
+        const localDevis = getDevis()
+        const localFactures = getFactures()
+
+        const finalClients = sbClients.length > 0 ? sbClients : localClients
+        const finalChantiers = sbChantiers.length > 0 ? sbChantiers : localChantiers
+        const finalDevis = sbDevis.length > 0 ? sbDevis : localDevis
+        const finalFactures = sbFactures.length > 0 ? sbFactures : localFactures
+
+        setClientsState(finalClients)
+        setChantiersState(finalChantiers)
+        setDevisState(finalDevis)
+        setFacturesState(finalFactures)
         setSettingsState(sbSettings || getSettings())
+
+        saveClients(finalClients)
+        saveChantiers(finalChantiers)
+        saveDevis(finalDevis)
+        saveFactures(finalFactures)
+        if (sbSettings) saveSettings(sbSettings)
 
         // Si aucune prestation → seeder avec les défauts
         if (sbPrestations.length === 0) {
-          const defaults = DEFAULT_PRESTATIONS.map(p => ({
-            id: genId(),
-            categorie: p.categorie,
-            description: p.description,
-            unite: p.unite,
-            prix_ht: p.prix_ht,
-            tva: p.tva,
-            actif: true,
-            created_at: new Date().toISOString(),
-          }))
-          setPrestationsState(defaults)
-          savePrestations(defaults)
-          sbInsertPrestationsBulk(defaults).catch(() => {})
+          const localPrestations = getPrestations()
+          if (localPrestations.length > 0) {
+            setPrestationsState(localPrestations)
+          } else {
+            const defaults = DEFAULT_PRESTATIONS.map(p => ({
+              id: genId(),
+              categorie: p.categorie,
+              description: p.description,
+              unite: p.unite,
+              prix_ht: p.prix_ht,
+              tva: p.tva,
+              actif: true,
+              created_at: new Date().toISOString(),
+            }))
+            setPrestationsState(defaults)
+            savePrestations(defaults)
+            sbInsertPrestationsBulk(defaults).catch(() => {})
+          }
         } else {
           setPrestationsState(sbPrestations)
           savePrestations(sbPrestations)
         }
-
-        saveClients(sbClients)
-        saveChantiers(sbChantiers)
-        saveDevis(sbDevis)
-        saveFactures(sbFactures)
-        if (sbSettings) saveSettings(sbSettings)
       } catch (err) {
         console.warn('Supabase inaccessible, fallback localStorage:', err.message)
         setSyncError(err.message)
@@ -165,10 +183,13 @@ export function AppProvider({ children }) {
       saveClients(next)
       return next
     })
-    try {
-      await sbInsertClient(client)
-    } catch (err) {
-      console.warn('Supabase addClient:', err.message)
+    if (isSupabaseConfigured) {
+      try {
+        const user = await sbGetUser()
+        await sbInsertClient({ ...client, user_id: user?.id })
+      } catch (err) {
+        console.warn('Supabase addClient:', err.message)
+      }
     }
     return client
   }, [])
@@ -179,10 +200,8 @@ export function AppProvider({ children }) {
       saveClients(next)
       return next
     })
-    try {
-      await sbUpdateClient(id, data)
-    } catch (err) {
-      console.warn('Supabase updateClient:', err.message)
+    if (isSupabaseConfigured) {
+      try { await sbUpdateClient(id, data) } catch (err) { console.warn('Supabase updateClient:', err.message) }
     }
   }, [])
 
@@ -192,10 +211,8 @@ export function AppProvider({ children }) {
       saveClients(next)
       return next
     })
-    try {
-      await sbDeleteClient(id)
-    } catch (err) {
-      console.warn('Supabase deleteClient:', err.message)
+    if (isSupabaseConfigured) {
+      try { await sbDeleteClient(id) } catch (err) { console.warn('Supabase deleteClient:', err.message) }
     }
   }, [])
 
@@ -214,10 +231,13 @@ export function AppProvider({ children }) {
       saveChantiers(next)
       return next
     })
-    try {
-      await sbInsertChantier(chantier)
-    } catch (err) {
-      console.warn('Supabase addChantier:', err.message)
+    if (isSupabaseConfigured) {
+      try {
+        const user = await sbGetUser()
+        await sbInsertChantier({ ...chantier, user_id: user?.id })
+      } catch (err) {
+        console.warn('Supabase addChantier:', err.message)
+      }
     }
     return chantier
   }, [])
@@ -228,10 +248,8 @@ export function AppProvider({ children }) {
       saveChantiers(next)
       return next
     })
-    try {
-      await sbUpdateChantier(id, data)
-    } catch (err) {
-      console.warn('Supabase updateChantier:', err.message)
+    if (isSupabaseConfigured) {
+      try { await sbUpdateChantier(id, data) } catch (err) { console.warn('Supabase updateChantier:', err.message) }
     }
   }, [])
 
@@ -241,10 +259,8 @@ export function AppProvider({ children }) {
       saveChantiers(next)
       return next
     })
-    try {
-      await sbDeleteChantier(id)
-    } catch (err) {
-      console.warn('Supabase deleteChantier:', err.message)
+    if (isSupabaseConfigured) {
+      try { await sbDeleteChantier(id) } catch (err) { console.warn('Supabase deleteChantier:', err.message) }
     }
   }, [])
 
@@ -275,11 +291,14 @@ export function AppProvider({ children }) {
     }
     setSettingsState(newSettings)
     saveSettings(newSettings)
-    sbSaveSettings(newSettings).catch(() => {})
-    try {
-      await sbInsertDevis(d)
-    } catch (err) {
-      console.warn('Supabase addDevis:', err.message)
+    if (isSupabaseConfigured) {
+      sbSaveSettings(newSettings).catch(() => {})
+      try {
+        const user = await sbGetUser()
+        await sbInsertDevis({ ...d, user_id: user?.id })
+      } catch (err) {
+        console.warn('Supabase addDevis:', err.message)
+      }
     }
     return d
   }, [settings])
@@ -290,10 +309,8 @@ export function AppProvider({ children }) {
       saveDevis(next)
       return next
     })
-    try {
-      await sbUpdateDevis(id, data)
-    } catch (err) {
-      console.warn('Supabase updateDevis:', err.message)
+    if (isSupabaseConfigured) {
+      try { await sbUpdateDevis(id, data) } catch (err) { console.warn('Supabase updateDevis:', err.message) }
     }
   }, [])
 
@@ -303,10 +320,8 @@ export function AppProvider({ children }) {
       saveDevis(next)
       return next
     })
-    try {
-      await sbDeleteDevis(id)
-    } catch (err) {
-      console.warn('Supabase deleteDevis:', err.message)
+    if (isSupabaseConfigured) {
+      try { await sbDeleteDevis(id) } catch (err) { console.warn('Supabase deleteDevis:', err.message) }
     }
   }, [])
 
@@ -338,11 +353,14 @@ export function AppProvider({ children }) {
     }
     setSettingsState(newSettings)
     saveSettings(newSettings)
-    sbSaveSettings(newSettings).catch(() => {})
-    try {
-      await sbInsertFacture(f)
-    } catch (err) {
-      console.warn('Supabase addFacture:', err.message)
+    if (isSupabaseConfigured) {
+      sbSaveSettings(newSettings).catch(() => {})
+      try {
+        const user = await sbGetUser()
+        await sbInsertFacture({ ...f, user_id: user?.id })
+      } catch (err) {
+        console.warn('Supabase addFacture:', err.message)
+      }
     }
     return f
   }, [settings])
@@ -353,10 +371,8 @@ export function AppProvider({ children }) {
       saveFactures(next)
       return next
     })
-    try {
-      await sbUpdateFacture(id, data)
-    } catch (err) {
-      console.warn('Supabase updateFacture:', err.message)
+    if (isSupabaseConfigured) {
+      try { await sbUpdateFacture(id, data) } catch (err) { console.warn('Supabase updateFacture:', err.message) }
     }
   }, [])
 
@@ -366,10 +382,8 @@ export function AppProvider({ children }) {
       saveFactures(next)
       return next
     })
-    try {
-      await sbDeleteFacture(id)
-    } catch (err) {
-      console.warn('Supabase deleteFacture:', err.message)
+    if (isSupabaseConfigured) {
+      try { await sbDeleteFacture(id) } catch (err) { console.warn('Supabase deleteFacture:', err.message) }
     }
   }, [])
 
@@ -397,7 +411,12 @@ export function AppProvider({ children }) {
       savePrestations(next)
       return next
     })
-    try { await sbInsertPrestation(p) } catch (err) { console.warn('Supabase addPrestation:', err.message) }
+    if (isSupabaseConfigured) {
+      try {
+        const user = await sbGetUser()
+        await sbInsertPrestation({ ...p, user_id: user?.id })
+      } catch (err) { console.warn('Supabase addPrestation:', err.message) }
+    }
     return p
   }, [])
 
@@ -407,7 +426,9 @@ export function AppProvider({ children }) {
       savePrestations(next)
       return next
     })
-    try { await sbUpdatePrestation(id, data) } catch (err) { console.warn('Supabase updatePrestation:', err.message) }
+    if (isSupabaseConfigured) {
+      try { await sbUpdatePrestation(id, data) } catch (err) { console.warn('Supabase updatePrestation:', err.message) }
+    }
   }, [])
 
   const deletePrestation = useCallback(async (id) => {
@@ -416,7 +437,9 @@ export function AppProvider({ children }) {
       savePrestations(next)
       return next
     })
-    try { await sbDeletePrestation(id) } catch (err) { console.warn('Supabase deletePrestation:', err.message) }
+    if (isSupabaseConfigured) {
+      try { await sbDeletePrestation(id) } catch (err) { console.warn('Supabase deletePrestation:', err.message) }
+    }
   }, [])
 
   // ── INTERVENTIONS ─────────────────────────────────────

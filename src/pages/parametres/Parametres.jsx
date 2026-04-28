@@ -393,28 +393,46 @@ export default function Parametres() {
               </div>
 
               <div className="bg-slate-800 rounded-2xl border border-slate-700 p-5 space-y-4">
-                <h2 className="text-white font-semibold">Mentions légales</h2>
+                <h2 className="text-white font-semibold">Conformité légale</h2>
+
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-slate-300 font-medium">Franchise en base de TVA</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Ajoute automatiquement « TVA non applicable — art. 293 B du CGI » sur chaque document et masque les colonnes TVA. Obligatoire pour les auto-entrepreneurs sous les seuils de franchise.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSection('facturation', 'franchise_tva', !form.facturation.franchise_tva)}
+                    className={`flex-shrink-0 w-12 h-6 rounded-full transition-colors relative ${form.facturation.franchise_tva ? 'bg-amber-500' : 'bg-slate-600'}`}
+                  >
+                    <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${form.facturation.franchise_tva ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+
+                <div className="flex items-start justify-between gap-4 pt-3 border-t border-slate-700">
+                  <div>
+                    <p className="text-sm text-slate-300 font-medium">Pénalités de retard automatiques</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Affiche en bas de chaque facture la mention légale : pénalité égale à 3× le taux d'intérêt légal + indemnité forfaitaire de 40 € (art. L441-10 du Code de Commerce). Obligatoire pour les factures B2B.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSection('facturation', 'penalites_retard', !form.facturation.penalites_retard)}
+                    className={`flex-shrink-0 w-12 h-6 rounded-full transition-colors relative ${form.facturation.penalites_retard ? 'bg-amber-500' : 'bg-slate-600'}`}
+                  >
+                    <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${form.facturation.penalites_retard ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-slate-800 rounded-2xl border border-slate-700 p-5 space-y-4">
+                <h2 className="text-white font-semibold">Mentions légales personnalisées</h2>
+                <p className="text-xs text-slate-500">Texte libre ajouté en pied de document (en plus des mentions automatiques ci-dessus).</p>
                 <textarea
                   value={form.facturation.mentions_legales || ''}
                   onChange={e => setSection('facturation', 'mentions_legales', e.target.value)}
                   rows={3}
                   className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none resize-none"
                 />
-              </div>
-
-              <div className="bg-slate-800 rounded-2xl border border-slate-700 p-5 space-y-4">
-                <h2 className="text-white font-semibold">Messages emails</h2>
-                {[
-                  { key: 'message_email_devis', label: 'Message envoi devis' },
-                  { key: 'message_email_facture', label: 'Message envoi facture' },
-                ].map(({ key, label }) => (
-                  <div key={key}>
-                    <label className="text-sm text-slate-300 block mb-1">{label}</label>
-                    <textarea value={form.facturation[key] || ''} onChange={e => setSection('facturation', key, e.target.value)}
-                      rows={2}
-                      className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none resize-none" />
-                  </div>
-                ))}
               </div>
             </>
           )}
@@ -643,39 +661,6 @@ export default function Parametres() {
                     <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${form.ia.suggestions_auto ? 'left-7' : 'left-1'}`} />
                   </button>
                 </div>
-              </div>
-
-              {/* EmailJS */}
-              <div className="bg-slate-800 rounded-2xl border border-slate-700 p-5 space-y-4">
-                <div>
-                  <h2 className="text-white font-semibold">Envoi d'emails (EmailJS)</h2>
-                  <p className="text-slate-400 text-xs mt-1">
-                    Compte gratuit sur <a href="https://www.emailjs.com" target="_blank" rel="noopener noreferrer" className="underline text-amber-400">emailjs.com</a> — 200 emails/mois.
-                    Créez un service (Gmail/Outlook), un template avec les variables <code className="bg-slate-700 px-1 rounded">to_email</code>, <code className="bg-slate-700 px-1 rounded">subject</code>, <code className="bg-slate-700 px-1 rounded">message</code>, <code className="bg-slate-700 px-1 rounded">from_name</code>.
-                  </p>
-                </div>
-                {[
-                  { key: 'public_key', label: 'Clé publique', placeholder: 'user_xxxxxxxxxxxx' },
-                  { key: 'service_id', label: 'Service ID', placeholder: 'service_xxxxxxx' },
-                  { key: 'template_id', label: 'Template ID', placeholder: 'template_xxxxxxx' },
-                ].map(({ key, label, placeholder }) => (
-                  <div key={key}>
-                    <label className="text-sm text-slate-300 block mb-1">{label}</label>
-                    <input
-                      value={form.emailjs?.[key] || ''}
-                      onChange={e => setSection('emailjs', key, e.target.value)}
-                      placeholder={placeholder}
-                      className="w-full bg-slate-900 border border-slate-600 rounded-xl text-white px-3 py-2 text-sm focus:border-amber-500 focus:outline-none placeholder-slate-500"
-                    />
-                  </div>
-                ))}
-                {form.emailjs?.public_key && form.emailjs?.service_id && form.emailjs?.template_id ? (
-                  <p className="text-emerald-400 text-xs flex items-center gap-1">
-                    <span>✓</span> EmailJS configuré — envoi automatique activé
-                  </p>
-                ) : (
-                  <p className="text-slate-500 text-xs">Sans configuration : les emails s'ouvrent dans votre client mail.</p>
-                )}
               </div>
             </div>
           )}
